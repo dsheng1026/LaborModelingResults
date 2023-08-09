@@ -115,7 +115,7 @@ SCENARIO <- c("E0")
 
 
 # legend position
-LP = "none"
+LP = "bottom"
 
 # Figure 2 ----
 # Fig. 2.4: production ----
@@ -865,4 +865,127 @@ P2.10 <- p + labs(title = "Export"); P2.10
 ggsave(filename = paste0(fig.dir, "Figure2/Figure2.10.png"), P2.10,
        width = 8, height = 10, dpi = 300, units = "in", device='png')
 
+
+# Fig. 2.11: labor unit cost: crop ----
+# revealed; aggregated
+
+Figure <- df_crop %>%
+  group_by(scenario, year, region, group) %>%
+  summarise(Q = sum(value, na.rm = T)) %>%
+  left_join(df_LL %>%
+              group_by(scenario, year, region, group) %>%
+              summarise(Labor = sum(value, na.rm = T)),
+            by = c("scenario", "year", "region", "group")) %>%
+  filter(year >= 2015) %>%
+  filter(group!= "Biomass") %>%
+  left_join(df_W, by = c("scenario", "year", "region")) %>%
+  group_by(scenario, year, group) %>%
+  summarise(Exp_L = sum(Labor * value),
+            Q = sum(Q)) %>%
+  mutate(UC_L = Exp_L / Q) %>% # $/kg
+  group_by(scenario, group) %>%
+  mutate(index = UC_L / UC_L[year == 2015])
+
+# Q-weighted average labor yld
+MEAN <- Figure %>%
+  group_by(year) %>%
+  summarise(Exp_L = sum(Exp_L),
+            Q = sum(Q)) %>%
+  mutate(UC_L = Exp_L / Q,
+         index = UC_L / UC_L[year == 2015])
+
+
+y_lim_u <-  max(Figure$index) + 0.2;  y_lim_u
+y_lim_l <-  min(Figure$index) - 0.2;  y_lim_l
+Figure %>%
+  ggplot() +
+  geom_line(aes(x = year, y = index, color = group), linewidth = 1.4) +
+  #  geom_ribbon(aes(x = year, ymin = upper, ymax = lower, group=group, fill=group), color= NA, alpha = 0.2) +
+  geom_hline(yintercept=1, linetype="dashed", color = "black") +
+  geom_line(data = MEAN,
+            aes(x = year, y = index), linetype = "dotted", linewidth = 1.4) +
+  labs(x = "Year", y = "Relative Change (2015 = 1)") +
+  theme_bw() + theme0 + theme_leg +
+  theme(legend.key.size = unit(1.2, "cm"),
+        legend.key.height=unit(1.2,"line"), legend.text = element_text(size = 14),
+        plot.title = element_text(size=16, face="bold"),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(legend.position = LP) +
+  # scale_y_continuous(expand = c(0, 0)) ->
+  scale_y_continuous(expand = c(0, 0), limits = c(y_lim_l, y_lim_u)) ->
+  p; p
+
+
+P2.11 <- p + labs(title = "Labor cost per unit (1975$/kg)"); P2.11
+
+
+ggsave(filename = paste0(fig.dir, "Figure2/Figure2.11.png"), P2.11,
+       width = 8, height = 10, dpi = 300, units = "in", device='png')
+
+
+# Fig. 2.12: animal_ food demand: crop ----
+# revealed; aggregated
+
+
+query = "AnimalDemand"
+df_list = list()
+for (i in 1:length(SCENARIO)){
+  sce_name = SCENARIO[i]
+  filename = paste0(input.dir,'/',sce_name,'/',query,'.csv')
+  filename
+  input = read.csv(filename, skip = 1, header = T) %>%
+    gather_time() %>%
+    select(-Units, -X) %>%
+    mutate(scenario = sce_name) -> middle
+  names(middle) <- gsub("-", ".", names(middle)) # rename columns to replace dash to dot
+  df_list[[i]] <- middle
+}
+
+D_an <- do.call(rbind, df_list) %>% # data.frame that collects regional GDP across scenarios
+  filter(grepl("regional", input),
+         grepl("FoodDemand_NonStaples", sector)) %>%
+  mutate(input = gsub("regional ", "", input)) %>%
+  select(scenario, region, input, year, value) %>% # Mt
+  rename(sector = input) %>%
+  filter(year >= 2015)
+
+Figure <- D_an %>%
+  group_by(scenario, sector, year) %>%
+  summarise(value = sum(value)) %>%
+  group_by(scenario, sector) %>%
+  mutate(index = value / value[year == 2015])
+
+MEAN <- Figure %>%
+  group_by(scenario, year) %>%
+  summarise(value = sum(value)) %>%
+  group_by(scenario) %>%
+  mutate(index = value / value[year == 2015])
+
+
+y_lim_u <-  max(Figure$index) + 0.2;  y_lim_u
+y_lim_l <-  min(Figure$index) - 0.2;  y_lim_l
+Figure %>%
+  ggplot() +
+  geom_line(aes(x = year, y = index, color = sector), linewidth = 1.4) +
+  geom_hline(yintercept=1, linetype="dashed", color = "black") +
+  geom_line(data = MEAN,
+            aes(x = year, y = index), linetype = "dotted", linewidth = 1.4) +
+  labs(x = "Year", y = "Relative Change (2015 = 1)") +
+  theme_bw() + theme0 + theme_leg +
+  theme(legend.key.size = unit(1.2, "cm"),
+        legend.key.height=unit(1.2,"line"), legend.text = element_text(size = 14),
+        plot.title = element_text(size=16, face="bold"),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(legend.position = LP) +
+  # scale_y_continuous(expand = c(0, 0)) ->
+  scale_y_continuous(expand = c(0, 0), limits = c(y_lim_l, y_lim_u)) ->
+  p; p
+
+P2.12 <- p + labs(title = "Livestock demand for nonstaple food"); P2.12
+
+
+ggsave(filename = paste0(fig.dir, "Figure2/Figure2.12.png"), P2.12,
+       width = 8, height = 10, dpi = 300, units = "in", device='png')
 
