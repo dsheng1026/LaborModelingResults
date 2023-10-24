@@ -76,6 +76,16 @@ ggsave(filename = paste0(fig.dir, "Figure1/POP_reg.png"), p,
        width = 16, height = 10, dpi = 300, units = "in", device='png')
 
 # rural population ----
+WB_rural <- read.csv("C:/Model/heatstress/API_SP.RUR.TOTL_DS2_en_csv_v2_5455093.csv", fileEncoding = 'UTF-8-BOM', skip = 4, header = T) %>%
+  gather_time() %>%
+  mutate(iso = tolower(Country.Code)) %>%
+  left_join(iso_GCAM_regID, by = "iso") %>%
+  left_join(GCAM_region_names, by = "GCAM_region_ID") %>%
+  select(year, region, GCAM_region_ID, value) %>%
+  filter(year<= YEAR_BASE) %>%
+  na.omit() %>%
+  group_by(region, year) %>%
+  summarize(hist = sum(value))
 
 RuralPop <- read.csv("RuralPop.csv")
 RuralPop %>%
@@ -154,6 +164,68 @@ ggsave(filename = paste0(fig.dir, "Figure1/POP_combined_reg.png"), P.1.5,
        width = 16, height = 10, dpi = 300, units = "in", device='png')
 
 
+# boxplot ----
+
+RURALPOP %>%
+  mutate(value = ifelse(year < 2015, hist, futr)) %>%
+  select(-X, -hist, -futr) %>%
+  group_by(region) %>%
+  mutate(index = value / value[year == 2015]) %>%
+  group_by(year) %>%
+  summarise(q1 = quantile(index, probs = 0.25),
+            q3 = quantile(index, probs = 0.75),
+            q2 = quantile(index, probs = 0.5),
+            wu = max(index),
+            wl = min(index),
+            ave = mean(index)) %>%
+  mutate(var = "rural") ->
+  index_rural
+
+POP %>%
+  mutate(value = ifelse(year < 2015, hist, futr)) %>%
+  select(-hist, -futr) %>%
+  group_by(region) %>%
+  mutate(index = value / value[year == 2015]) %>%
+  group_by(year) %>%
+  summarise(q1 = quantile(index, probs = 0.25),
+            q3 = quantile(index, probs = 0.75),
+            q2 = quantile(index, probs = 0.5),
+            wu = max(index),
+            wl = min(index),
+            ave = mean(index)) %>%
+  mutate(var = "pop") ->
+  index_pop
+
+LF %>%
+  select(region, year, value = LF) %>%
+  group_by(region) %>%
+  mutate(index = value / value[year == 2015]) %>%
+  group_by(year) %>%
+  summarise(q1 = quantile(index, probs = 0.25),
+            q3 = quantile(index, probs = 0.75),
+            q2 = quantile(index, probs = 0.5),
+            wu = max(index),
+            wl = min(index),
+            ave = mean(index)) %>%
+  mutate(var = "LF") ->
+  index_LF
+
+index_LF %>%
+  bind_rows(index_pop) %>%
+  bind_rows(index_rural) %>%
+  filter(year >= 1990) %>%
+  mutate(year = as.factor(year)) %>%
+  ggplot() +
+  geom_boxplot(aes(x = year, ymin = wl, lower = q1, middle = q2, upper = q3, ymax = wu, fill = var),
+               alpha=0.5, lwd=0.5, fatten = 1, stat = "identity") +  # whisker to 10% and 90%
+  geom_point(aes(x = year, y = ave, color = var), size = 2, position=position_dodge(width=0.95)) +
+  labs(x = "Year", y = "Relative change (2015 = 1)") +
+  scale_fill_discrete(labels = c("Labor force", "Population", "Rural population")) +
+  scale_color_discrete(labels = c("Labor force", "Population", "Rural population")) +
+  theme_bw() + theme0 + theme_leg + theme_add -> p; p
+
+ggsave(filename = paste0(fig.dir, "Figure_Final/Box_index_driver.png"), p,
+       width = 12, height = 10, dpi = 300, units = "in", device='png')
 
 
 # ** GLOBAL ** ----
@@ -334,6 +406,46 @@ P.1.7 <- p;
 ggsave(filename = paste0(fig.dir, "Figure1/labor_demand_reg.png"), P.1.7,
        width = 16, height = 10, dpi = 300, units = "in", device='png')
 
+# boxplot ----
+df_LLL %>%
+  mutate(value = ifelse(year < 2020, hist, futr)) %>%
+  select(scenario, region, year, value) %>%
+  group_by(scenario, region) %>%
+  mutate(index = value / value[year == 2015]) %>%
+  group_by(scenario, year) %>%
+  summarise(q1 = quantile(index, probs = 0.25),
+            q3 = quantile(index, probs = 0.75),
+            q2 = quantile(index, probs = 0.5),
+            wu = max(index),
+            wl = min(index),
+            ave = mean(index)) %>%
+  mutate(var = "labor") %>%
+  filter(year >= 1975) ->
+  index_L
+
+index_box <- index_L %>% filter(year >= 1990)
+
+index_box %>%
+  ggplot() +
+  geom_boxplot(data = index_box %>% filter(year <= 2015, scenario == "New reference") %>%
+                 mutate(year = as.factor(year)), aes(x = year, ymin = wl, lower = q1, middle = q2, upper = q3, ymax = wu),
+               alpha=0.5, lwd=0.5, fatten = 1, stat = "identity") +
+  geom_point(data = index_box %>% filter(year <= 2015, scenario == "New reference") %>%
+               mutate(year = as.factor(year)),aes(x = year, y = ave), size = 2, position=position_dodge(width=0.95)) +
+  geom_boxplot(data = index_box %>% filter(year > 2015) %>%
+                 mutate(year = as.factor(year)), aes(x = year, ymin = wl, lower = q1, middle = q2, upper = q3, ymax = wu, fill = scenario),
+               alpha=0.5, lwd=0.5, fatten = 1, stat = "identity") +  # whisker to 10% and 90%
+  geom_point(data = index_box %>% filter(year > 2015) %>%
+               mutate(year = as.factor(year)),aes(x = year, y = ave, color = scenario), size = 2, position=position_dodge(width=0.95)) +
+  labs(x = "Year", y = "Relative change (2015 = 1)") +
+  ggtitle("Agricultural labor demand") +
+  theme_bw() + theme0 + theme_leg + theme_add -> p; p
+
+ggsave(filename = paste0(fig.dir, "Figure_Final/Box_index_labor.png"), p,
+       width = 12, height = 10, dpi = 300, units = "in", device='png')
+
+
+
 # capital demand ----
 query = "CapitalDemandSec"
 df_list = list()
@@ -422,6 +534,43 @@ P.1.6 <- p; P.1.6
 
 ggsave(filename = paste0(fig.dir, "Figure1/LK_ratio_reg.png"), P.1.6,
        width = 16, height = 10, dpi = 300, units = "in", device='png')
+
+# boxplot ----
+df_ratio %>%
+  mutate(value = ifelse(year < 2020, hist, futr)) %>%
+  select(scenario, region, year, value) %>%
+  group_by(scenario, region) %>%
+  mutate(index = value / value[year == 2015]) %>%
+  group_by(scenario, year) %>%
+  summarise(q1 = quantile(index, probs = 0.25),
+            q3 = quantile(index, probs = 0.75),
+            q2 = quantile(index, probs = 0.5),
+            wu = max(index),
+            wl = min(index),
+            ave = mean(index)) %>%
+  mutate(var = "LK_ratio") ->
+  index_ratio
+
+index_box <- index_ratio %>% filter(year >= 1990)
+index_box %>%
+  ggplot() +
+  geom_boxplot(data = index_box %>% filter(year <= 2015, scenario == "New reference") %>%
+                 mutate(year = as.factor(year)), aes(x = year, ymin = wl, lower = q1, middle = q2, upper = q3, ymax = wu),
+               alpha=0.5, lwd=0.5, fatten = 1, stat = "identity") +
+  geom_point(data = index_box %>% filter(year <= 2015, scenario == "New reference") %>%
+               mutate(year = as.factor(year)),aes(x = year, y = ave), size = 2, position=position_dodge(width=0.95)) +
+  geom_boxplot(data = index_box %>% filter(year > 2015) %>%
+                 mutate(year = as.factor(year)), aes(x = year, ymin = wl, lower = q1, middle = q2, upper = q3, ymax = wu, fill = scenario),
+               alpha=0.5, lwd=0.5, fatten = 1, stat = "identity") +  # whisker to 10% and 90%
+  geom_point(data = index_box %>% filter(year > 2015) %>%
+               mutate(year = as.factor(year)),aes(x = year, y = ave, color = scenario), size = 2, position=position_dodge(width=0.95)) +
+  labs(x = "Year", y = "Relative change (2015 = 1)") +
+  ggtitle("Agricultural labor to capital ratio") +
+  theme_bw() + theme0 + theme_leg + theme_add -> p; p
+
+ggsave(filename = paste0(fig.dir, "Figure_Final/Box_index_ratio.png"), p,
+       width = 12, height = 10, dpi = 300, units = "in", device='png')
+
 
 
 # ag labor / labor force ----
@@ -617,6 +766,71 @@ P.1.9 <- p;
 
 ggsave(filename = paste0(fig.dir, "Figure1/aglabor_share.png"), P.1.9,
        width = 16, height = 10, dpi = 300, units = "in", device='png')
+
+
+# boxplot ----
+LF %>%
+  mutate(scenario = "E0") %>%
+  bind_rows(LF %>%
+              mutate(scenario = "E3")) %>%
+  SCE_NM() %>%
+  left_join(df_LLL %>%
+              mutate(labor = ifelse(year <= 2015, hist, futr)) %>%
+              select(scenario, region, year, labor),
+            by = c("scenario", "region" ,"year")) %>%
+  mutate(share = labor / LF) ->
+  df_share
+
+
+df_share %>%
+  select(scenario, region, year, value = share) %>%
+  group_by(scenario, region) %>%
+  mutate(index = value / value[year == 2015]) %>%
+  group_by(scenario, year) %>%
+  summarise(q1 = quantile(index, probs = 0.25),
+            q3 = quantile(index, probs = 0.75),
+            q2 = quantile(index, probs = 0.5),
+            wu = max(index),
+            wl = min(index)) %>%
+  mutate(var = "LF_share") ->
+  index_share
+
+df_share %>%
+  group_by(scenario, year) %>%
+  summarise(labor = sum(labor),
+            LF = sum(LF)) %>%
+  mutate(value = labor / LF) %>%
+  group_by(scenario) %>%
+  mutate(index = value / value[year == 2015]) %>%
+  select(scenario, year, ave = index) ->
+  index_share_ave
+
+index_share %>%
+  left_join(index_share_ave, by = c("scenario", "year")) ->
+  index_share
+
+index_box <- index_share %>% filter(year >= 1990)
+
+index_box %>%
+  ggplot() +
+  geom_boxplot(data = index_box %>% filter(year <= 2015, scenario == "New reference") %>%
+                 mutate(year = as.factor(year)), aes(x = year, ymin = wl, lower = q1, middle = q2, upper = q3, ymax = wu),
+               alpha=0.5, lwd=0.5, fatten = 1, stat = "identity") +
+  geom_point(data = index_box %>% filter(year <= 2015, scenario == "New reference") %>%
+               mutate(year = as.factor(year)),aes(x = year, y = ave), size = 2, position=position_dodge(width=0.95)) +
+  geom_boxplot(data = index_box %>% filter(year > 2015) %>%
+                 mutate(year = as.factor(year)), aes(x = year, ymin = wl, lower = q1, middle = q2, upper = q3, ymax = wu, fill = scenario),
+               alpha=0.5, lwd=0.5, fatten = 1, stat = "identity") +  # whisker to 10% and 90%
+  geom_point(data = index_box %>% filter(year > 2015) %>%
+               mutate(year = as.factor(year)),aes(x = year, y = ave, color = scenario), size = 2, position=position_dodge(width=0.95)) +
+  labs(x = "Year", y = "Relative change (2015 = 1)") +
+  ggtitle("Agricultural labor to labor force") +
+  theme_bw() + theme0 + theme_leg + theme_add -> p; p
+
+ggsave(filename = paste0(fig.dir, "Figure_Final/Box_index_share.png"), p,
+       width = 12, height = 10, dpi = 300, units = "in", device='png')
+
+
 
 # effective labor ----
 df_eff %>%
