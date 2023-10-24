@@ -42,6 +42,16 @@ gather_time <- function(.data){
     mutate(year = as.integer(gsub("X", "", year))) %>%
     return()
 }
+short_name <- function(df){
+  df %>%
+    mutate(region = gsub("Central America and Caribbean", "Caribbean", region),
+           region = gsub("European Free Trade Association", "EU Free Trade", region),
+           region = gsub("South America_Southern", "South America_S" , region),
+           region = gsub("South America_Northern", "South America_N" , region)) ->
+    df
+  return(df)
+}
+cluster <- read.csv("ClusterRegion.csv")
 
 # ******** Figure 1.1: drivers ******** ----
 
@@ -621,10 +631,12 @@ df_LL %>%
   left_join(gcam_macro_TFP_open %>% select(-scenario),
             by = c("region", "year")) %>%
   mutate(productivity = ifelse(year<=2015, 1, productivity),
+         productivity = ifelse(scenario == "E3", 1, productivity),
          effective.labor = value * productivity) ->
   df_eff
 
 df_eff %>%
+  short_name() %>%
   SCE_NM() %>%
   filter(year >= 2015) %>%
   ggplot() +
