@@ -48,7 +48,7 @@ gather_time <- function(.data){
 YEAR_BASE <- 2015
 YEAR_start <- 1975
 
-POP <- read.csv("C:/Model/LaborModelingResults/POP_SSP2.csv")
+POP <- read.csv("POP_SSP2.csv")
 
 # ** REGIONAL ** ----
 
@@ -108,7 +108,7 @@ ggsave(filename = paste0(fig.dir, "Figure1/RURALPOP_reg.png"), p,
 
 # labor force ----
 
-LFS <- read.csv("C:/Model/LaborModelingResults/LF_share.csv")
+LFS <- read.csv("LF_share.csv")
 
 POP %>%
   mutate(POP = ifelse(year <= 2015, hist, futr)) %>%
@@ -462,7 +462,38 @@ P.1.9 <- p;
 ggsave(filename = paste0(fig.dir, "Figure1/aglabor_share_reg.png"), P.1.9,
        width = 16, height = 10, dpi = 300, units = "in", device='png')
 
+# effective labor ----
 
+# read in calibrated tfp = labor productivity growth
+gcam_macro_TFP_open <-  read.csv("gcam_macro_TFP_open.csv", skip = 6, header = T) %>%
+  filter(scenario == "gSSP2")
+
+df_LL %>%
+  left_join(gcam_macro_TFP_open %>% select(-scenario),
+            by = c("region", "year")) %>%
+  mutate(productivity = ifelse(year<=2015, 1, productivity),
+         effective.labor = value * productivity) ->
+  df_eff
+
+df_eff %>%
+  SCE_NM() %>%
+  filter(year >= 2015) %>%
+  ggplot() +
+  geom_line(aes(x = year, y = effective.labor, color = scenario), linewidth = 1.2) +
+  facet_wrap(~ region, ncol = 8, scales = "free_y") +
+  labs(x = "Year", y = "Effective labor") +
+  scale_x_continuous(breaks = seq(YEAR_start, 2100, by = 20)) +
+  # scale_color_discrete(labels = c("Future", "Historical")) +
+  theme_bw() + theme0 + theme_leg +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        strip.text.x = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) -> p; p
+P.1.0 <- p;
+
+ggsave(filename = paste0(fig.dir, "Figure1/effective_labor_reg.png"), P.1.0,
+       width = 16, height = 10, dpi = 300, units = "in", device='png')
 
 # ** GLOBAL ** ----
 
@@ -586,3 +617,25 @@ P.1.9 <- p;
 
 ggsave(filename = paste0(fig.dir, "Figure1/aglabor_share.png"), P.1.9,
        width = 16, height = 10, dpi = 300, units = "in", device='png')
+
+# effective labor ----
+df_eff %>%
+  group_by(scenario, year) %>%
+  summarise(effective.labor = sum(effective.labor)) %>%
+  SCE_NM() %>%
+  filter(year >= 2015) %>%
+  ggplot() +
+  geom_line(aes(x = year, y = effective.labor, color = scenario), linewidth = 1.2) +
+  labs(x = "Year", y = "Effective labor") +
+  scale_x_continuous(breaks = seq(YEAR_start, 2100, by = 5)) +
+  # scale_color_discrete(labels = c("Future", "Historical")) +
+  theme_bw() + theme0 + theme_leg +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        strip.text.x = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) -> p; p
+P.1.0 <- p;
+
+ggsave(filename = paste0(fig.dir, "Figure1/effective_labor.png"), P.1.0,
+       width = 8, height = 10, dpi = 300, units = "in", device='png')
