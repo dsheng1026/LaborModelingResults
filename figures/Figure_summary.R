@@ -43,7 +43,7 @@ gather_time <- function(.data){
     return()
 }
 
-# ******** Figure 1 ******** ----
+# ******** Figure 1.1: drivers ******** ----
 
 YEAR_BASE <- 2015
 YEAR_start <- 1975
@@ -120,7 +120,7 @@ POP %>%
   mutate(LF = POP * labor.force.share / 10^3) -> # mpl
   LF
 
-# combined ----
+# drivers combined ----
 LF %>%
   mutate(source = ifelse(year <= 2015, "hist", "futr")) %>%
   spread(source, value = LF) %>%
@@ -152,6 +152,9 @@ P.1.5 <- p;
 
 ggsave(filename = paste0(fig.dir, "Figure1/POP_combined_reg.png"), P.1.5,
        width = 16, height = 10, dpi = 300, units = "in", device='png')
+
+
+
 
 # ** GLOBAL ** ----
 
@@ -214,7 +217,7 @@ P.1.2 <- p + theme(legend.position = 'none'); P.1.2
 ggsave(filename = paste0(fig.dir, "Figure1/POP_rural.png"), P.1.2,
        width = 8, height = 10, dpi = 300, units = "in", device='png')
 
-# combined ----
+# drivers combined ----
 LF %>%
   group_by(year) %>%
   summarise(value = sum(LF)) %>%
@@ -253,3 +256,333 @@ P.1.5 <- p; P.1.5
 
 ggsave(filename = paste0(fig.dir, "Figure1/POP_combined.png"), P.1.5,
        width = 8, height = 10, dpi = 300, units = "in", device='png')
+
+
+# ******** Figure 1.2: labor metrics ******** ----
+
+SCENARIO <- c("E3", "E0")
+
+SCE_NM <- function(.data){
+  .data %>%
+    mutate(scenario = gsub("E0","New reference", scenario),
+           scenario = gsub("E3","Old reference", scenario)) %>%
+    return()
+}
+
+# ** REGIONAL ** ----
+
+# labor demand ----
+
+USDA_Labor <- read.csv("USDA_Labor.csv")
+USDA_Capital <- read.csv("USDA_Capital.csv")
+
+
+query = "LaborDemandSec"
+df_list = list()
+for (i in 1:length(SCENARIO)){
+  sce_name = SCENARIO[i]
+
+  filename = paste0(input.dir,sce_name,'/',query,'.csv')
+  filename
+  input = read.csv(filename, skip = 1, header = T)
+
+  input %>%
+    gather_time() %>%
+    select(-Units, -X) %>%
+    mutate(scenario = sce_name) -> middle
+  names(middle) <- gsub("-", ".", names(middle)) # rename columns to replace dash to dot
+  df_list[[i]] <- middle
+}
+# collect total ag labor demand across scenarios
+df_L <- do.call(rbind, df_list) %>%
+  filter(!sector %in% c("Forest", "Pasture", "biomass"))
+
+df_L %>%
+  group_by(scenario, region, year) %>%
+  summarise(value = sum(value)) -> # mpl
+  df_LL
+
+USDA_Labor %>%
+  mutate(scenario = "E0") %>%
+  bind_rows(USDA_Labor %>%
+              mutate(scenario = "E3")) %>%
+  group_by(scenario, region, year) %>%
+  summarise(hist = sum(labor_ppl) / 10^6) %>%  # mpl
+  full_join(df_LL %>% rename(futr = value) %>% filter(year >= 2015),
+            by = c("scenario","region" ,"year")) %>%
+  SCE_NM() ->
+  df_LLL
+
+df_LLL %>%
+  filter(year >= YEAR_start) %>%
+  ggplot() +
+  geom_line(aes(x = year, y = futr, color = scenario), linewidth = 1.4, linetype = "dotdash") +
+  geom_line(aes(x = year, y = hist, color = scenario), linewidth = 1.4) +
+  geom_vline(xintercept = 2015) +
+  facet_wrap(~ region, ncol = 8, scales = "free_y") +
+  labs(x = "Year", y = "Million people") +
+  scale_x_continuous(breaks = seq(YEAR_start, 2100, by = 20)) +
+  # scale_color_discrete(labels = c("Future", "Historical")) +
+  theme_bw() + theme0 + theme_leg +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        strip.text.x = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) -> p; p
+P.1.7 <- p;
+
+ggsave(filename = paste0(fig.dir, "Figure1/labor_demand_reg.png"), P.1.7,
+       width = 16, height = 10, dpi = 300, units = "in", device='png')
+
+# capital demand ----
+query = "CapitalDemandSec"
+df_list = list()
+for (i in 1:length(SCENARIO)){
+  sce_name = SCENARIO[i]
+
+  filename = paste0(input.dir,sce_name,'/',query,'.csv')
+  filename
+  input = read.csv(filename, skip = 1, header = T)
+
+  input %>%
+    gather_time() %>%
+    select(-Units, -X) %>%
+    mutate(scenario = sce_name) -> middle
+  names(middle) <- gsub("-", ".", names(middle)) # rename columns to replace dash to dot
+  df_list[[i]] <- middle
+}
+# collect total ag labor demand across scenarios
+df_K <- do.call(rbind, df_list) %>%
+  filter(!sector %in% c("Forest", "Pasture", "biomass"))
+
+df_K %>%
+  group_by(scenario, region, year) %>%
+  summarise(value = sum(value)) -> # mpl
+  df_KK
+
+USDA_Capital %>%
+  mutate(scenario = "E0") %>%
+  bind_rows(USDA_Capital %>%
+              mutate(scenario = "E3")) %>%
+  group_by(scenario, region, year) %>%
+  summarise(hist = sum(capital_1975USD) / 10^9) %>%  # bil 1975$
+  full_join(df_KK %>% rename(futr = value) %>% filter(year >= 2015),
+            by = c("scenario","region" ,"year")) %>%
+  SCE_NM() ->
+  df_KKK
+
+df_KKK %>%
+  filter(year >= YEAR_start) %>%
+  ggplot() +
+  geom_line(aes(x = year, y = futr, color = scenario), linewidth = 1.4, linetype = "dotdash") +
+  geom_line(aes(x = year, y = hist, color = scenario), linewidth = 1.4) +
+  geom_vline(xintercept = 2015) +
+  facet_wrap(~ region, ncol = 8, scales = "free_y") +
+  labs(x = "Year", y = "Billion 1975$") +
+  scale_x_continuous(breaks = seq(YEAR_start, 2100, by = 10)) +
+  # scale_color_discrete(labels = c("Future", "Historical")) +
+  theme_bw() + theme0 + theme_leg +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        strip.text.x = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) -> p; p
+P.1.8 <- p; P.1.8
+
+ggsave(filename = paste0(fig.dir, "Figure1/capital_demand_reg.png"), P.1.8,
+       width = 8, height = 10, dpi = 300, units = "in", device='png')
+
+
+# L/K ratio ----
+df_LLL %>%
+  gather(time, labor, hist:futr) %>%
+  left_join(df_KKK %>% gather(time, capital, hist:futr),
+            by = c("scenario", "region", "year", "time")) %>%
+  mutate(ratio = labor/capital) %>%
+  select(-labor, -capital) %>%
+  spread(time, ratio) -> df_ratio
+
+df_ratio %>%
+  filter(year >= YEAR_start) %>%
+  ggplot() +
+  geom_line(aes(x = year, y = futr, color = scenario), linewidth = 1.4, linetype = "dotdash") +
+  geom_line(aes(x = year, y = hist, color = scenario), linewidth = 1.4) +
+  geom_vline(xintercept = 2015) +
+  labs(x = "Year", y = "Million people per billion 1975$") +
+  scale_x_continuous(breaks = seq(YEAR_start, 2100, by = 20)) +
+  facet_wrap(~ region, ncol = 8, scales = "free_y") +
+  # scale_color_discrete(labels = c("Future", "Historical")) +
+  theme_bw() + theme0 + theme_leg +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        strip.text.x = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) -> p; p
+P.1.6 <- p; P.1.6
+
+ggsave(filename = paste0(fig.dir, "Figure1/LK_ratio_reg.png"), P.1.6,
+       width = 16, height = 10, dpi = 300, units = "in", device='png')
+
+
+# ag labor / labor force ----
+LF %>%
+  mutate(scenario = "E0") %>%
+  bind_rows(LF %>%
+              mutate(scenario = "E3")) %>%
+  SCE_NM() %>%
+  left_join(df_LLL %>%
+              mutate(labor = ifelse(year <= 2015, hist, futr)) %>%
+              select(scenario, region, year, labor),
+            by = c("scenario", "region" ,"year")) %>%
+  mutate(share = labor / LF) %>%
+  mutate(period = ifelse(year < 2015, "hist", "futr")) %>%
+  select(scenario, region, year, share, period) %>%
+  spread(period, share) %>%
+  mutate(hist = ifelse(year == 2015, futr, hist)) ->
+  df_share
+
+df_share %>%
+  filter(year >= YEAR_start) %>%
+  ggplot() +
+  geom_line(aes(x = year, y = futr, color = scenario), linewidth = 1.4, linetype = "dotdash") +
+  geom_line(aes(x = year, y = hist, color = scenario), linewidth = 1.4) +
+  geom_vline(xintercept = 2015) +
+  facet_wrap(~ region, ncol = 8, scales = "free_y") +
+  labs(x = "Year", y = "Ag labor to labor force (%)") +
+  scale_x_continuous(breaks = seq(YEAR_start, 2100, by = 20)) +
+  # scale_color_discrete(labels = c("Future", "Historical")) +
+  theme_bw() + theme0 + theme_leg +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        strip.text.x = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) -> p; p
+P.1.9 <- p;
+
+ggsave(filename = paste0(fig.dir, "Figure1/aglabor_share_reg.png"), P.1.9,
+       width = 16, height = 10, dpi = 300, units = "in", device='png')
+
+
+
+# ** GLOBAL ** ----
+
+# labor demand ----
+
+df_LLL %>%
+  filter(year >= YEAR_start) %>%
+  group_by(scenario, year) %>%
+  summarise(hist = sum(hist),
+            futr = sum(futr)) %>%
+  ggplot() +
+  geom_line(aes(x = year, y = futr, color = scenario), linewidth = 1.4, linetype = "dotdash") +
+  geom_line(aes(x = year, y = hist, color = scenario), linewidth = 1.4) +
+  geom_vline(xintercept = 2015) +
+  labs(x = "Year", y = "Million people") +
+  scale_x_continuous(breaks = seq(YEAR_start, 2100, by = 10)) +
+  # scale_color_discrete(labels = c("Future", "Historical")) +
+  theme_bw() + theme0 + theme_leg +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        strip.text.x = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) -> p; p
+P.1.7 <- p;
+
+ggsave(filename = paste0(fig.dir, "Figure1/labor_demand.png"), P.1.7,
+       width = 8, height = 10, dpi = 300, units = "in", device='png')
+
+
+# capital demand ----
+
+df_KKK %>%
+  filter(year >= YEAR_start) %>%
+  group_by(scenario, year) %>%
+  summarise(hist = sum(hist),
+            futr = sum(futr)) %>%
+  ggplot() +
+  geom_line(aes(x = year, y = futr, color = scenario), linewidth = 1.4, linetype = "dotdash") +
+  geom_line(aes(x = year, y = hist, color = scenario), linewidth = 1.4) +
+  geom_vline(xintercept = 2015) +
+  labs(x = "Year", y = "Billion 1975$") +
+  scale_x_continuous(breaks = seq(YEAR_start, 2100, by = 10)) +
+  # scale_color_discrete(labels = c("Future", "Historical")) +
+  theme_bw() + theme0 + theme_leg +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        strip.text.x = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) -> p; p
+P.1.8 <- p; P.1.8
+
+ggsave(filename = paste0(fig.dir, "Figure1/capital_demand.png"), P.1.8,
+       width = 8, height = 10, dpi = 300, units = "in", device='png')
+
+# L/K ratio ----
+df_LLL %>%
+  gather(time, labor, hist:futr) %>%
+  left_join(df_KKK %>% gather(time, capital, hist:futr),
+            by = c("scenario", "region", "year", "time")) %>%
+  group_by(scenario, year, time ) %>%
+  summarise(labor = sum(labor),
+            capital= sum(capital)) %>%
+  mutate(ratio = labor/capital) %>%
+  select(-labor, -capital) %>%
+  spread(time, ratio) -> df_ratio
+
+df_ratio %>%
+  filter(year >= YEAR_start) %>%
+  ggplot() +
+  geom_line(aes(x = year, y = futr, color = scenario), linewidth = 1.4, linetype = "dotdash") +
+  geom_line(aes(x = year, y = hist, color = scenario), linewidth = 1.4) +
+  geom_vline(xintercept = 2015) +
+  labs(x = "Year", y = "Million people per billion 1975$") +
+  scale_x_continuous(breaks = seq(YEAR_start, 2100, by = 10)) +
+  theme_bw() + theme0 + theme_leg +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        strip.text.x = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) -> p; p
+P.1.6 <- p; P.1.6
+
+ggsave(filename = paste0(fig.dir, "Figure1/LK_ratio.png"), P.1.6,
+       width = 16, height = 10, dpi = 300, units = "in", device='png')
+
+# ag labor / labor force ----
+LF %>%
+  mutate(scenario = "E0") %>%
+  bind_rows(LF %>%
+              mutate(scenario = "E3")) %>%
+  SCE_NM() %>%
+  left_join(df_LLL %>%
+              mutate(labor = ifelse(year <= 2015, hist, futr)) %>%
+              select(scenario, region, year, labor),
+            by = c("scenario", "region" ,"year")) %>%
+  group_by(scenario, year) %>%
+  summarise(LF = sum(LF),
+            labor = sum(labor)) %>%
+  mutate(share = labor / LF) %>%
+  mutate(period = ifelse(year < 2015, "hist", "futr")) %>%
+  select(scenario,year, share, period) %>%
+  spread(period, share) %>%
+  mutate(hist = ifelse(year == 2015, futr, hist)) ->
+  df_share
+
+df_share %>%
+  filter(year >= YEAR_start) %>%
+  ggplot() +
+  geom_line(aes(x = year, y = futr, color = scenario), linewidth = 1.4, linetype = "dotdash") +
+  geom_line(aes(x = year, y = hist, color = scenario), linewidth = 1.4) +
+  geom_vline(xintercept = 2015) +
+  labs(x = "Year", y = "Ag labor to labor force (%)") +
+  scale_x_continuous(breaks = seq(YEAR_start, 2100, by = 20)) +
+  theme_bw() + theme0 + theme_leg +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        strip.text.x = element_text(size = 12),
+        legend.position = "bottom",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) -> p; p
+P.1.9 <- p;
+
+ggsave(filename = paste0(fig.dir, "Figure1/aglabor_share.png"), P.1.9,
+       width = 16, height = 10, dpi = 300, units = "in", device='png')
